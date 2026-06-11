@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FiOS Биллинг</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a66c2">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{
+  --bg:#f4f5f7; --card:#ffffff; --text:#1a1d21; --muted:#6b7280; --line:#e5e7eb;
+  --accent:#0a66c2; --accent2:#0a84ff; --green:#0a7d36; --red:#c0392b;
+  --chip:#eef2f7; --chip-on:#0a66c2;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#101214; --card:#1b1e22; --text:#eceff3; --muted:#9aa3ad; --line:#2c3138;
+         --accent:#3b9aff; --accent2:#3b9aff; --green:#3ecf6e; --red:#ff6b5e;
+         --chip:#262b31; --chip-on:#1f5fa8; }
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+     background:var(--bg); color:var(--text); padding-bottom:90px}
+header{position:sticky; top:0; z-index:5; background:var(--bg); padding:10px 14px 6px;
+       border-bottom:1px solid var(--line)}
+h1{font-size:18px; margin:0 0 8px; display:flex; justify-content:space-between; align-items:center}
+h1 .gear{font-size:20px; cursor:pointer; padding:4px 8px; border-radius:8px}
+.weeknav{display:flex; align-items:center; gap:6px; margin-bottom:8px}
+.weeknav button{border:none; background:var(--card); color:var(--text); font-size:18px;
+  width:38px; height:38px; border-radius:10px; cursor:pointer; border:1px solid var(--line)}
+.weeklabel{flex:1; text-align:center; font-weight:600; font-size:15px}
+.weeklabel small{display:block; color:var(--green); font-weight:700; font-size:14px}
+.days{display:flex; gap:5px}
+.day{flex:1; text-align:center; padding:6px 2px; border-radius:10px; background:var(--card);
+     border:1px solid var(--line); cursor:pointer; user-select:none}
+.day.sel{background:var(--accent); color:#fff; border-color:var(--accent)}
+.day .dw{font-size:11px; opacity:.75}
+.day .dn{font-size:15px; font-weight:700}
+.day .ds{font-size:10px; font-weight:600; color:var(--green)}
+.day.sel .ds{color:#d8ffe3}
+main{padding:12px 14px}
+.daysum{display:flex; justify-content:space-between; align-items:baseline; margin:2px 2px 10px}
+.daysum b{font-size:20px; color:var(--green)}
+.card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+      padding:12px 14px; margin-bottom:10px; cursor:pointer}
+.card .top{display:flex; justify-content:space-between; align-items:center; gap:8px}
+.card .ord{font-weight:700; font-size:16px}
+.card .tech{color:var(--muted); font-size:12px}
+.card .tot{font-weight:800; font-size:16px; color:var(--green); white-space:nowrap}
+.card .lines{margin-top:6px; font-size:13px; color:var(--muted); line-height:1.5}
+.card .lines b{color:var(--text); font-weight:600}
+.pd{display:inline-block; background:#f4b30022; color:#b07900; border:1px solid #f4b30055;
+    font-size:11px; font-weight:700; border-radius:6px; padding:1px 6px; margin-left:6px}
+.empty{text-align:center; color:var(--muted); padding:40px 0; font-size:14px}
+.fab{position:fixed; right:18px; bottom:74px; z-index:6; width:56px; height:56px; border-radius:50%;
+     background:var(--accent); color:#fff; font-size:30px; border:none; cursor:pointer;
+     box-shadow:0 4px 14px rgba(0,0,0,.25)}
+nav.tabs{position:fixed; bottom:0; left:0; right:0; z-index:6; display:flex;
+  background:var(--card); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{flex:1; border:none; background:none; color:var(--muted); font-size:13px;
+  padding:12px 0 10px; cursor:pointer; font-weight:600}
+nav.tabs button.on{color:var(--accent)}
+/* modal */
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:10; display:none;
+  align-items:flex-end; justify-content:center}
+.overlay.show{display:flex}
+.sheet{background:var(--bg); width:100%; max-width:560px; max-height:92vh; overflow-y:auto;
+  border-radius:18px 18px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.sheet h2{font-size:17px; margin:0 0 12px; display:flex; justify-content:space-between}
+.sheet h2 .x{cursor:pointer; color:var(--muted); font-size:22px; line-height:1}
+.frow{display:flex; gap:8px; margin-bottom:10px}
+.frow>*{flex:1}
+input,select{width:100%; padding:11px 12px; font-size:16px; border-radius:10px;
+  border:1px solid var(--line); background:var(--card); color:var(--text)}
+label{font-size:12px; color:var(--muted); display:block; margin:0 0 4px 2px}
+.presets{display:flex; gap:7px; flex-wrap:wrap; margin:4px 0 12px}
+.presets button{border:1px solid var(--accent); color:var(--accent); background:none;
+  border-radius:18px; padding:7px 13px; font-size:13px; font-weight:600; cursor:pointer}
+.codes{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:6px; margin-bottom:12px}
+.codes .ch{background:var(--chip); border:1px solid var(--line); border-radius:10px;
+  padding:7px 4px; text-align:center; cursor:pointer; font-size:12.5px; font-weight:700}
+.codes .ch small{display:block; font-weight:500; color:var(--muted); font-size:11px}
+.codes .ch.on{background:var(--chip-on); color:#fff; border-color:var(--chip-on)}
+.codes .ch.on small{color:#d6e8ff}
+.linerow{display:flex; align-items:center; gap:8px; background:var(--card);
+  border:1px solid var(--line); border-radius:10px; padding:7px 10px; margin-bottom:6px}
+.linerow .lc{flex:1; font-weight:700; font-size:14px}
+.linerow .lc small{display:block; color:var(--muted); font-weight:500; font-size:11px}
+.step{display:flex; align-items:center; gap:2px}
+.step button{width:34px; height:34px; font-size:18px; border:none; border-radius:8px;
+  background:var(--chip); color:var(--text); cursor:pointer}
+.step input{width:52px; text-align:center; padding:7px 2px; font-size:15px}
+.linerow .lt{width:62px; text-align:right; font-weight:700; font-size:14px}
+.linerow .del{border:none; background:none; color:var(--red); font-size:18px; cursor:pointer; padding:4px}
+.formtotal{display:flex; justify-content:space-between; font-size:18px; font-weight:800;
+  margin:10px 2px}
+.btn{width:100%; padding:14px; font-size:16px; font-weight:700; color:#fff; background:var(--accent);
+  border:none; border-radius:12px; cursor:pointer}
+.btn.ghost{background:none; color:var(--red); border:1px solid var(--red); margin-top:8px}
+.btn.sec{background:var(--card); color:var(--text); border:1px solid var(--line); margin-top:8px}
+/* weeks tab */
+table.wk{width:100%; border-collapse:collapse; background:var(--card); border-radius:14px; overflow:hidden;
+  border:1px solid var(--line)}
+table.wk td,table.wk th{padding:11px 12px; font-size:14px; border-bottom:1px solid var(--line); text-align:left}
+table.wk tr:last-child td{border-bottom:none}
+table.wk .sum{font-weight:700; color:var(--green); text-align:right; white-space:nowrap}
+table.wk .xl{color:var(--accent); font-weight:700; cursor:pointer; text-align:right; white-space:nowrap}
+.grand{display:flex; justify-content:space-between; align-items:center; background:var(--card);
+  border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; font-weight:700}
+.grand b{font-size:22px; color:var(--green)}
+.search{margin:14px 0 8px}
+.hint{color:var(--muted); font-size:12px; margin:6px 2px 14px}
+.srow{font-size:13px; padding:8px 4px; border-bottom:1px solid var(--line); cursor:pointer}
+.toast{position:fixed; left:50%; transform:translateX(-50%); bottom:120px; z-index:20;
+  background:var(--text); color:var(--bg); padding:10px 18px; border-radius:20px; font-size:14px;
+  opacity:0; transition:opacity .25s; pointer-events:none}
+.toast.show{opacity:1}
+.setrow{display:flex; align-items:center; gap:8px; margin-bottom:6px}
+.setrow .nm{flex:1; font-size:14px; font-weight:600}
+.setrow input{width:80px; text-align:right}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>FiOS Биллинг</span><span class="gear" id="gearBtn">⚙︎</span></h1>
+  <div id="dayHeader">
+    <div class="weeknav">
+      <button id="prevW">‹</button>
+      <div class="weeklabel" id="weekLabel"></div>
+      <button id="nextW">›</button>
+    </div>
+    <div class="days" id="dayPills"></div>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<button class="fab" id="fabAdd">+</button>
+
+<nav class="tabs">
+  <button data-tab="day" class="on">📋 День</button>
+  <button data-tab="weeks">📊 Недели</button>
+</nav>
+
+<!-- order form -->
+<div class="overlay" id="formOverlay">
+  <div class="sheet">
+    <h2><span id="formTitle">Новый заказ</span><span class="x" data-close="formOverlay">✕</span></h2>
+    <div class="frow">
+      <div><label>Номер заказа</label>
+        <input id="fOrder" inputmode="numeric" placeholder="126ХХХХХХ"></div>
+      <div><label>Дата</label><input id="fDate" type="date"></div>
+    </div>
+    <div class="frow">
+      <div><label>Техник</label><select id="fTech"></select></div>
+    </div>
+    <label>Быстрые шаблоны</label>
+    <div class="presets" id="presetBtns"></div>
+    <label>Коды (нажми, чтобы добавить)</label>
+    <div class="codes" id="codeGrid"></div>
+    <div id="fLines"></div>
+    <div class="formtotal"><span>Итого</span><span id="fTotal">$0</span></div>
+    <button class="btn" id="fSave">Сохранить</button>
+    <button class="btn ghost" id="fDelete" style="display:none">Удалить заказ</button>
+  </div>
+</div>
+
+<!-- settings -->
+<div class="overlay" id="setOverlay">
+  <div class="sheet">
+    <h2><span>Настройки</span><span class="x" data-close="setOverlay">✕</span></h2>
+    <label>Техник по умолчанию</label>
+    <select id="sDefTech" style="margin-bottom:12px"></select>
+    <label>Добавить техника</label>
+    <div class="frow"><input id="sNewTech" placeholder="Имя Фамилия">
+      <button class="btn" style="flex:0 0 110px" id="sAddTech">Добавить</button></div>
+    <label style="margin-top:8px">Тарифы кодов ($)</label>
+    <div id="sRates"></div>
+    <label style="margin-top:8px">Автосохранение в файл</label>
+    <div id="sAutosave"></div>
+    <button class="btn sec" id="sBackup">⬇︎ Скачать резервную копию (JSON)</button>
+    <button class="btn sec" id="sRestore">⬆︎ Восстановить из копии</button>
+    <input type="file" id="sFile" accept=".json" style="display:none">
+    <p class="hint">Данные хранятся в этом браузере. Время от времени скачивай резервную копию.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script id="seed" type="application/json">[]</script>
+
+<script>
+"use strict";
+/* ================= catalog ================= */
+const CATALOG = [
+ {c:"F014-1",  r:100, q:1,  d:"Установка Internet/Data"},
+ {c:"F006",    r:20,  q:4,  d:"Aerial drop (за опору)"},
+ {c:"1-F014-5",r:30,  q:1,  d:"Первый доп. джек"},
+ {c:"2-F014-5",r:14,  q:2,  d:"Доп. джек"},
+ {c:"F014-6",  r:30,  q:1,  d:"ONT add/move/replace"},
+ {c:"F014-7",  r:16,  q:3,  d:"Снять aerial drop"},
+ {c:"F011",    r:20,  q:2,  d:"Trip charge"},
+ {c:"F012",    r:28,  q:1,  d:"Час работы"},
+ {c:"PD",      r:100, q:1,  d:"Per Diem"},
+ {c:"F008",    r:46,  q:1,  d:"Trouble ticket"},
+ {c:"F009",    r:30,  q:1,  d:"TT → maintenance"},
+ {c:"F010",    r:20,  q:1,  d:"Trouble follow-up"},
+ {c:"F005",    r:13,  q:1,  d:"Доп. STB"},
+ {c:"F007",    r:30,  q:1,  d:"Доп. splice drop"},
+ {c:"F014-10", r:0.4, q:300,d:"UG drop в кондуите (фут)"},
+ {c:"F001",    r:126, q:1,  d:"Установка Tel+Int+Video"},
+ {c:"F003",    r:102, q:1,  d:"Установка Int+Video"},
+ {c:"F014-9",  r:105, q:1,  d:"Установка Tel+Video"},
+ {c:"F031",    r:0.48,q:100,d:"MDU drop (фут)"},
+ {c:"TR",      r:50,  q:1,  d:"Training daily"},
+];
+const PRESETS = [
+ {n:"🏠 Установка", items:[["F014-1",1],["F006",4],["1-F014-5",1],["2-F014-5",2],["F014-6",1],["F014-7",3]]},
+ {n:"🚐 Trip ×2", items:[["F011",2]]},
+ {n:"🔧 Trouble", items:[["F008",1]]},
+ {n:"💵 +PD", items:[["PD",1]]},
+];
+
+/* ================= state ================= */
+const LS_KEY = "fiosBilling.v1";
+let state;
+function load(){
+  try{ state = JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ state = null; }
+  if(!state || !Array.isArray(state.entries)){
+    const seed = JSON.parse(document.getElementById("seed").textContent);
+    seed.forEach((e,i)=>{ e.id = "s"+i; });
+    state = { entries: seed, techs: ["Anton Latyshev"], defTech: "Anton Latyshev", rates: {} };
+    // collect techs from seed
+    seed.forEach(e=>{ if(e.tech && !state.techs.includes(e.tech)) state.techs.push(e.tech); });
+    save();
+  }
+  if(!state.rates) state.rates = {};
+}
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); scheduleFileWrite(); }
+
+/* ---- автосохранение в файл на диске (Chrome/Edge) ---- */
+let fileHandle = null, pendingHandle = null, _fwTimer = null;
+const idb = {
+  open(){ return new Promise((res,rej)=>{ const r = indexedDB.open(LS_KEY+".fs",1);
+    r.onupgradeneeded = ()=> r.result.createObjectStore("kv");
+    r.onsuccess = ()=> res(r.result); r.onerror = ()=> rej(r.error); }); },
+  async get(k){ const db = await this.open(); return new Promise(res=>{ const t = db.transaction("kv").objectStore("kv").get(k); t.onsuccess=()=>res(t.result||null); t.onerror=()=>res(null); }); },
+  async set(k,v){ const db = await this.open(); return new Promise(res=>{ const t = db.transaction("kv","readwrite").objectStore("kv").put(v,k); t.onsuccess=()=>res(); t.onerror=()=>res(); }); },
+  async del(k){ const db = await this.open(); return new Promise(res=>{ const t = db.transaction("kv","readwrite").objectStore("kv").delete(k); t.onsuccess=()=>res(); t.onerror=()=>res(); }); }
+};
+async function writeToFile(){
+  if(!fileHandle) return;
+  try{
+    const w = await fileHandle.createWritable();
+    await w.write(JSON.stringify(state, null, 1));
+    await w.close();
+  }catch(e){ /* доступ к файлу потерян — данные остаются в браузере */ }
+}
+function scheduleFileWrite(){
+  if(!fileHandle) return;
+  clearTimeout(_fwTimer); _fwTimer = setTimeout(writeToFile, 600);
+}
+async function enableAutosave(){
+  try{
+    const h = await showSaveFilePicker({suggestedName:"fios-billing-autosave.json",
+      types:[{description:"JSON", accept:{"application/json":[".json"]}}]});
+    fileHandle = h; pendingHandle = null;
+    await idb.set("handle", h); await writeToFile();
+    toast("Автосохранение в файл включено ✓"); renderAutosave();
+  }catch(e){ /* отменено */ }
+}
+async function disableAutosave(){
+  fileHandle = null; pendingHandle = null;
+  await idb.del("handle"); renderAutosave(); toast("Автосохранение выключено");
+}
+function renderAutosave(){
+  const el = $("sAutosave"); if(!el) return;
+  if(!("showSaveFilePicker" in window)){
+    el.innerHTML = `<p class="hint">Этот браузер не поддерживает запись в файл (нужен Chrome или Edge). Данные сохраняются в браузере автоматически — просто скачивай резервную копию.</p>`;
+    return;
+  }
+  if(fileHandle){
+    el.innerHTML = `<p class="hint">✓ Включено: каждая запись сразу сохраняется в файл «${fileHandle.name}».</p>
+      <button class="btn sec" id="sAutoOff">Выключить автосохранение</button>`;
+    $("sAutoOff").onclick = disableAutosave;
+  }else{
+    el.innerHTML = `<button class="btn sec" id="sAutoOn">📁 Включить автосохранение в файл</button>
+      <p class="hint">Выберешь файл один раз — дальше каждая запись будет сразу писаться в него. Чистка браузера такому файлу не страшна.</p>`;
+    $("sAutoOn").onclick = enableAutosave;
+  }
+}
+// при старте: восстановить доступ к файлу, если он был включён раньше
+(async()=>{
+  if(!("showSaveFilePicker" in window)) return;
+  const h = await idb.get("handle");
+  if(!h) return;
+  try{
+    if((await h.queryPermission({mode:"readwrite"}))==="granted"){ fileHandle = h; return; }
+  }catch(e){ return; }
+  pendingHandle = h;
+  const once = async ()=>{
+    document.removeEventListener("pointerdown", once);
+    try{
+      if(pendingHandle && (await pendingHandle.requestPermission({mode:"readwrite"}))==="granted"){
+        fileHandle = pendingHandle; pendingHandle = null;
+        writeToFile(); toast("Автосохранение в файл активно ✓"); renderAutosave();
+      }
+    }catch(e){}
+  };
+  document.addEventListener("pointerdown", once);
+})();
+function rateOf(code){
+  if(state.rates[code]!=null) return state.rates[code];
+  const c = CATALOG.find(x=>x.c===code); return c? c.r : 0;
+}
+function entryTotal(e){ return e.lines.reduce((s,l)=>s+l.q*l.r,0); }
+function money(n){ return "$"+(Math.round(n*100)/100).toLocaleString("en-US"); }
+
+/* ================= dates / weeks ================= */
+function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function fromIso(s){ const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
+function monday(d){ const x=new Date(d); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; }
+function weekLabelOf(mon){
+  const sat = new Date(mon); sat.setDate(sat.getDate()+5);
+  const f = d=> String(d.getMonth()+1).padStart(2,"0")+"."+String(d.getDate()).padStart(2,"0");
+  return f(mon)+"-"+f(sat);
+}
+function weekKeyOfDate(s){ return iso(monday(fromIso(s))); }
+const DW = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"];
+
+let selDate = iso(new Date());
+let tab = "day";
+
+/* ================= render: day ================= */
+const $ = id => document.getElementById(id);
+function dayTotal(ds){ return state.entries.filter(e=>e.date===ds).reduce((s,e)=>s+entryTotal(e),0); }
+
+function renderHeader(){
+  $("dayHeader").style.display = tab==="day" ? "" : "none";
+  if(tab!=="day") return;
+  const mon = monday(fromIso(selDate));
+  let wTot = 0;
+  const pills = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(mon); d.setDate(d.getDate()+i);
+    const ds = iso(d), t = dayTotal(ds); wTot += t;
+    if(i===6 && t===0) continue; // воскресенье показываем только если есть записи
+    pills.push(`<div class="day ${ds===selDate?"sel":""}" data-d="${ds}">
+      <div class="dw">${DW[d.getDay()]}</div><div class="dn">${d.getDate()}</div>
+      <div class="ds">${t? "$"+Math.round(t):"·"}</div></div>`);
+  }
+  $("weekLabel").innerHTML = weekLabelOf(mon)+`<small>${money(wTot)} за неделю</small>`;
+  $("dayPills").innerHTML = pills.join("");
+  document.querySelectorAll(".day").forEach(el=> el.onclick = ()=>{ selDate = el.dataset.d; render(); });
+}
+
+function renderDay(){
+  const list = state.entries.filter(e=>e.date===selDate);
+  const d = fromIso(selDate);
+  let html = `<div class="daysum"><span>${DW[d.getDay()]}, ${d.getDate()}.${String(d.getMonth()+1).padStart(2,"0")} — заказов: ${list.length}</span><b>${money(dayTotal(selDate))}</b></div>`;
+  if(!list.length) html += `<div class="empty">Пока пусто.<br>Нажми <b>+</b> чтобы добавить заказ.</div>`;
+  for(const e of list){
+    const pd = e.lines.some(l=>l.c==="PD");
+    const lines = e.lines.filter(l=>l.c!=="PD").map(l=>`<b>${l.c}</b>×${l.q}`).join(" · ");
+    html += `<div class="card" data-id="${e.id}">
+      <div class="top"><div><span class="ord">${e.order||"без номера"}</span>${pd?'<span class="pd">PD</span>':""}
+        <div class="tech">${e.tech}</div></div>
+        <div class="tot">${money(entryTotal(e))}</div></div>
+      <div class="lines">${lines}</div></div>`;
+  }
+  $("main").innerHTML = html;
+  document.querySelectorAll(".card[data-id]").forEach(el=> el.onclick = ()=> openForm(el.dataset.id));
+}
+
+/* ================= render: weeks ================= */
+function renderWeeks(){
+  const byWeek = {};
+  for(const e of state.entries){
+    const k = weekKeyOfDate(e.date);
+    (byWeek[k] = byWeek[k]||[]).push(e);
+  }
+  const keys = Object.keys(byWeek).sort().reverse();
+  const grand = state.entries.reduce((s,e)=>s+entryTotal(e),0);
+  let html = `<div class="grand"><span>Всего за год</span><b>${money(grand)}</b></div>`;
+  html += `<div class="search"><input id="qSearch" inputmode="numeric" placeholder="🔍 Поиск по номеру заказа"></div><div id="qRes"></div>`;
+  html += `<table class="wk"><tr><th>Неделя</th><th style="text-align:right">Сумма</th><th></th></tr>`;
+  for(const k of keys){
+    const tot = byWeek[k].reduce((s,e)=>s+entryTotal(e),0);
+    html += `<tr><td>${weekLabelOf(fromIso(k))}<br><small style="color:var(--muted)">${byWeek[k].length} заказ.</small></td>
+      <td class="sum">${money(tot)}</td>
+      <td class="xl" data-wk="${k}">Excel ⬇︎</td></tr>`;
+  }
+  html += `</table><p class="hint">«Excel ⬇︎» скачивает недельный таймшит в формате Frontier — такой же, как твоя таблица.</p>`;
+  $("main").innerHTML = html;
+  document.querySelectorAll(".xl[data-wk]").forEach(el=> el.onclick = ()=> exportWeek(el.dataset.wk));
+  $("qSearch").oninput = ()=>{
+    const q = $("qSearch").value.trim();
+    if(q.length<3){ $("qRes").innerHTML=""; return; }
+    const res = state.entries.filter(e=>(e.order||"").includes(q)).slice(0,15);
+    $("qRes").innerHTML = res.map(e=>`<div class="srow" data-id="${e.id}"><b>${e.order}</b> — ${e.date} — ${e.tech} — ${money(entryTotal(e))}</div>`).join("") || `<div class="hint">не найдено</div>`;
+    document.querySelectorAll(".srow").forEach(el=> el.onclick = ()=>{
+      const e = state.entries.find(x=>x.id===el.dataset.id);
+      selDate = e.date; tab="day"; render(); openForm(e.id);
+    });
+  };
+}
+
+function render(){
+  renderHeader();
+  document.querySelectorAll("nav.tabs button").forEach(b=> b.classList.toggle("on", b.dataset.tab===tab));
+  $("fabAdd").style.display = tab==="day" ? "" : "none";
+  if(tab==="day") renderDay(); else renderWeeks();
+}
+
+/* ================= order form ================= */
+let editId = null, fLines = [], lastTech = null;
+function buildTechSelect(sel){
+  const techs = [...new Set([sel, ...state.techs])].filter(Boolean);
+  $("fTech").innerHTML = techs.map(t=>`<option ${t===sel?"selected":""}>${t}</option>`).join("")
+    + `<option value="__add">➕ Добавить техника…</option>`
+    + `<option value="__del">🗑 Удалить из списка…</option>`;
+  lastTech = sel || techs[0] || null;
+}
+$("fTech").onchange = ()=>{
+  const v = $("fTech").value;
+  if(v==="__add"){
+    const n = (prompt("Имя нового техника (Имя Фамилия):")||"").trim();
+    if(n){
+      if(!state.techs.includes(n)){ state.techs.push(n); save(); toast("Техник добавлен"); }
+      buildTechSelect(n);
+    } else buildTechSelect(lastTech);
+  } else if(v==="__del"){
+    if(state.techs.length<=1){ toast("Нельзя удалить последнего техника"); buildTechSelect(lastTech); return; }
+    if(confirm(`Удалить техника «${lastTech}» из списка?`)){
+      state.techs = state.techs.filter(t=>t!==lastTech);
+      if(state.defTech===lastTech) state.defTech = state.techs[0];
+      save(); buildTechSelect(state.defTech); toast("Техник удалён");
+    } else buildTechSelect(lastTech);
+  } else lastTech = v;
+};
+function openForm(id){
+  editId = id || null;
+  const e = id ? state.entries.find(x=>x.id===id) : null;
+  $("formTitle").textContent = e ? "Заказ "+(e.order||"") : "Новый заказ";
+  $("fOrder").value = e ? e.order : "";
+  $("fDate").value = e ? e.date : selDate;
+  buildTechSelect(e ? e.tech : state.defTech);
+  fLines = e ? e.lines.map(l=>({...l})) : [];
+  $("fDelete").style.display = e ? "" : "none";
+  renderFormLines();
+  $("formOverlay").classList.add("show");
+  if(!e) setTimeout(()=>$("fOrder").focus(),100);
+}
+function addLine(code, qty){
+  const ex = fLines.find(l=>l.c===code);
+  if(ex){ ex.q += (qty!=null? qty : 1); }
+  else{
+    const cat = CATALOG.find(x=>x.c===code);
+    fLines.push({c:code, q: qty!=null? qty : (cat?cat.q:1), r: rateOf(code)});
+  }
+  renderFormLines();
+}
+function renderFormLines(){
+  $("presetBtns").innerHTML = PRESETS.map((p,i)=>`<button data-p="${i}">${p.n}</button>`).join("")
+    + `<button data-p="last">⟳ Как прошлый</button>`;
+  document.querySelectorAll("#presetBtns button").forEach(b=> b.onclick = ()=>{
+    if(b.dataset.p==="last"){
+      const last = state.entries.filter(e=>e.id!==editId).slice(-1)[0];
+      if(last){ fLines = last.lines.map(l=>({...l})); renderFormLines(); }
+      return;
+    }
+    PRESETS[b.dataset.p].items.forEach(([c,q])=>{
+      if(!fLines.find(l=>l.c===c)) fLines.push({c, q, r: rateOf(c)});
+    });
+    renderFormLines();
+  });
+  $("codeGrid").innerHTML = CATALOG.map(x=>{
+    const on = fLines.find(l=>l.c===x.c);
+    return `<div class="ch ${on?"on":""}" data-c="${x.c}" title="${x.d}">${x.c}<small>$${rateOf(x.c)}</small></div>`;
+  }).join("");
+  document.querySelectorAll("#codeGrid .ch").forEach(el=> el.onclick = ()=>{
+    const code = el.dataset.c;
+    const i = fLines.findIndex(l=>l.c===code);
+    if(i>=0) fLines.splice(i,1); else addLine(code, null);
+    renderFormLines();
+  });
+  $("fLines").innerHTML = fLines.map((l,i)=>{
+    const cat = CATALOG.find(x=>x.c===l.c);
+    return `<div class="linerow">
+      <div class="lc">${l.c}<small>${cat?cat.d:""} · $${l.r}</small></div>
+      <div class="step"><button data-i="${i}" data-a="-">−</button>
+        <input data-i="${i}" type="number" step="any" value="${l.q}">
+        <button data-i="${i}" data-a="+">＋</button></div>
+      <div class="lt">${money(l.q*l.r)}</div>
+      <button class="del" data-i="${i}" data-a="x">✕</button>
+    </div>`;
+  }).join("");
+  document.querySelectorAll("#fLines .step button, #fLines .del").forEach(b=> b.onclick = (ev)=>{
+    ev.stopPropagation();
+    const i = +b.dataset.i, a = b.dataset.a;
+    if(a==="x") fLines.splice(i,1);
+    else { fLines[i].q = Math.max(0, fLines[i].q + (a==="+"?1:-1)); if(fLines[i].q===0) fLines.splice(i,1); }
+    renderFormLines();
+  });
+  document.querySelectorAll("#fLines .step input").forEach(inp=> inp.onchange = ()=>{
+    const i = +inp.dataset.i; const v = parseFloat(inp.value);
+    if(!isNaN(v) && v>0) fLines[i].q = v; else fLines.splice(i,1);
+    renderFormLines();
+  });
+  $("fTotal").textContent = money(fLines.reduce((s,l)=>s+l.q*l.r,0));
+}
+$("fSave").onclick = ()=>{
+  if(!fLines.length){ toast("Добавь хотя бы один код"); return; }
+  const techVal = $("fTech").value.startsWith("__") ? lastTech : $("fTech").value;
+  const data = { date: $("fDate").value, tech: techVal,
+                 order: $("fOrder").value.trim(), lines: fLines };
+  if(editId){ Object.assign(state.entries.find(x=>x.id===editId), data); }
+  else{ data.id = "e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); state.entries.push(data); }
+  // держим записи отсортированными по дате
+  state.entries.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+  save(); selDate = data.date;
+  $("formOverlay").classList.remove("show");
+  render(); toast("Сохранено ✓");
+};
+$("fDelete").onclick = ()=>{
+  if(!confirm("Удалить заказ?")) return;
+  state.entries = state.entries.filter(x=>x.id!==editId);
+  save(); $("formOverlay").classList.remove("show"); render(); toast("Удалено");
+};
+
+/* ================= settings ================= */
+function openSettings(){
+  $("sDefTech").innerHTML = state.techs.map(t=>`<option ${t===state.defTech?"selected":""}>${t}</option>`).join("");
+  $("sRates").innerHTML = CATALOG.map(x=>`<div class="setrow"><div class="nm">${x.c} <small style="color:var(--muted);font-weight:400">${x.d}</small></div>
+    <input type="number" step="any" data-c="${x.c}" value="${rateOf(x.c)}"></div>`).join("");
+  document.querySelectorAll("#sRates input").forEach(inp=> inp.onchange = ()=>{
+    const v = parseFloat(inp.value); if(!isNaN(v)){ state.rates[inp.dataset.c]=v; save(); toast("Тариф обновлён"); }
+  });
+  renderAutosave();
+  $("setOverlay").classList.add("show");
+}
+$("sDefTech").onchange = ()=>{ state.defTech = $("sDefTech").value; save(); };
+$("sAddTech").onclick = ()=>{
+  const v = $("sNewTech").value.trim();
+  if(v && !state.techs.includes(v)){ state.techs.push(v); save(); $("sNewTech").value=""; openSettings(); toast("Техник добавлен"); }
+};
+$("sBackup").onclick = ()=>{
+  const blob = new Blob([JSON.stringify(state,null,1)], {type:"application/json"});
+  dl(blob, "fios-billing-backup-"+iso(new Date())+".json");
+};
+$("sRestore").onclick = ()=> $("sFile").click();
+$("sFile").onchange = ()=>{
+  const f = $("sFile").files[0]; if(!f) return;
+  f.text().then(t=>{
+    try{
+      const s = JSON.parse(t);
+      if(!Array.isArray(s.entries)) throw 0;
+      if(confirm(`Заменить текущие данные? (в копии ${s.entries.length} заказов)`)){
+        state = s; save(); render(); $("setOverlay").classList.remove("show"); toast("Восстановлено ✓");
+      }
+    }catch(e){ toast("Не похоже на файл копии"); }
+  });
+};
+
+/* ================= xlsx export ================= */
+/* === XLSX LIB START === */
+function crc32(buf){
+  if(!crc32.t){ crc32.t = new Int32Array(256);
+    for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320 ^ (c>>>1) : c>>>1; crc32.t[n]=c; } }
+  let c = -1;
+  for(let i=0;i<buf.length;i++) c = crc32.t[(c^buf[i])&0xFF] ^ (c>>>8);
+  return (c^-1)>>>0;
+}
+function zipStore(files){ // files: [{name, text}]
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const now = new Date();
+  const dosTime = (now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1);
+  const dosDate = ((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
+  for(const f of files){
+    const name = enc.encode(f.name), data = enc.encode(f.text);
+    const crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true);
+    lh.setUint16(8,0,true); lh.setUint16(10,dosTime,true); lh.setUint16(12,dosDate,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,data.length,true); lh.setUint32(22,data.length,true);
+    lh.setUint16(26,name.length,true); lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer), name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true); ch.setUint16(8,0x0800,true);
+    ch.setUint16(10,0,true); ch.setUint16(12,dosTime,true); ch.setUint16(14,dosDate,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,data.length,true); ch.setUint32(24,data.length,true);
+    ch.setUint16(28,name.length,true); ch.setUint32(42,offset,true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + data.length;
+  }
+  let cdSize = 0; central.forEach(p=> cdSize += p.length);
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0,0x06054b50,true); eocd.setUint16(8,files.length,true); eocd.setUint16(10,files.length,true);
+  eocd.setUint32(12,cdSize,true); eocd.setUint32(16,offset,true);
+  const all = [...parts, ...central, new Uint8Array(eocd.buffer)];
+  let len = 0; all.forEach(p=> len += p.length);
+  const out = new Uint8Array(len); let pos = 0;
+  all.forEach(p=>{ out.set(p,pos); pos += p.length; });
+  return out;
+}
+function xesc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function cStr(ref,v,bold){ return `<c r="${ref}" t="inlineStr"${bold?' s="1"':''}><is><t xml:space="preserve">${xesc(v)}</t></is></c>`; }
+function cNum(ref,v){ return `<c r="${ref}"><v>${v}</v></c>`; }
+function cFx(ref,f,v){ return `<c r="${ref}"><f>${xesc(f)}</f><v>${Math.round(v*100)/100}</v></c>`; }
+const COLS = ["A","B","C","D","E","F","G","H"];
+
+function buildWeekXlsx(weekKey, entries, label){
+  // группируем по дате
+  const byDate = {};
+  entries.forEach(e=> (byDate[e.date]=byDate[e.date]||[]).push(e));
+  const dates = Object.keys(byDate).sort();
+  const rows = []; // each: {n, cells:[xml]}
+  rows.push({n:1, xml: cStr("B1","Sub Frontier FiOS I&R Timesheet",1)+cStr("C1","Name:",1)+cStr("E1","Garage:",1)+cStr("G1","Corp ID:",1)});
+  rows.push({n:2, xml: ["First Name","Last Name","Order number","Billing Code","QTY","Rate","Total Billed","Date"]
+    .map((h,i)=>cStr(COLS[i]+"2",h,1)).join("")});
+  let r = 3, unitRefs=[], firstLine=3;
+  for(const ds of dates){
+    let firstOfDay = true;
+    for(const e of byDate[ds]){
+      e.lines.forEach((l,li)=>{
+        let xml = "";
+        if(li===0){
+          const sp = e.tech.indexOf(" ");
+          const fn = sp>0? e.tech.slice(0,sp): e.tech, ln = sp>0? e.tech.slice(sp+1):"";
+          xml += cStr("A"+r,fn)+cStr("B"+r,ln);
+          if(e.order) xml += cStr("C"+r,e.order);
+        }
+        xml += cStr("D"+r,l.c)+cNum("E"+r,l.q)+cNum("F"+r,l.r)+cFx("G"+r,`E${r}*F${r}`,l.q*l.r);
+        if(li===0 && firstOfDay){
+          const d = fromIso(ds);
+          xml += cStr("H"+r, String(d.getMonth()+1).padStart(2,"0")+"/"+String(d.getDate()).padStart(2,"0")+"/"+d.getFullYear());
+          firstOfDay = false;
+        }
+        rows.push({n:r, xml}); r++;
+      });
+      r++; // пустая строка между заказами
+    }
+  }
+  const last = r-1;
+  r++;
+  const rowUT=r, rowPD=r+1, rowGT=r+2;
+  const utVal = entries.reduce((s,e)=>s+e.lines.filter(l=>l.c!=="PD").reduce((x,l)=>x+l.q*l.r,0),0);
+  const pdVal = entries.reduce((s,e)=>s+e.lines.filter(l=>l.c==="PD").reduce((x,l)=>x+l.q*l.r,0),0);
+  rows.push({n:rowUT, xml: cStr("F"+rowUT,"Unit Total",1)+cFx("G"+rowUT,`SUMIF(D${firstLine}:D${last},"<>PD",G${firstLine}:G${last})`,utVal)});
+  rows.push({n:rowPD, xml: cStr("F"+rowPD,"Per Diem",1)+cFx("G"+rowPD,`SUMIF(D${firstLine}:D${last},"PD",G${firstLine}:G${last})`,pdVal)});
+  rows.push({n:rowGT, xml: cStr("F"+rowGT,"Gross Total",1)+cFx("G"+rowGT,`G${rowUT}+G${rowPD}`,utVal+pdVal)});
+  rows.push({n:rowGT+2, xml: cStr("A"+(rowGT+2),"Employee Signature:",1)});
+
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="2" width="11" customWidth="1"/><col min="3" max="3" width="15" customWidth="1"/><col min="4" max="4" width="13" customWidth="1"/><col min="5" max="6" width="7" customWidth="1"/><col min="7" max="8" width="12" customWidth="1"/></cols><sheetData>${
+    rows.map(x=>`<row r="${x.n}">${x.xml}</row>`).join("")
+  }</sheetData></worksheet>`;
+
+  const files = [
+    {name:"[Content_Types].xml", text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`},
+    {name:"_rels/.rels", text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:"xl/workbook.xml", text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xesc(label)}" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+    {name:"xl/_rels/workbook.xml.rels", text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+    {name:"xl/styles.xml", text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>`},
+    {name:"xl/worksheets/sheet1.xml", text: sheet},
+  ];
+  return zipStore(files);
+}
+/* === XLSX LIB END === */
+
+function exportWeek(weekKey){
+  const entries = state.entries.filter(e=> weekKeyOfDate(e.date)===weekKey)
+    .sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+  if(!entries.length){ toast("Нет данных за неделю"); return; }
+  const label = weekLabelOf(fromIso(weekKey));
+  const bytes = buildWeekXlsx(weekKey, entries, label);
+  dl(new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), label+".xlsx");
+  toast("Файл "+label+".xlsx скачан");
+}
+function dl(blob, name){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+/* ================= misc ui ================= */
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 1800);
+}
+document.querySelectorAll("[data-close]").forEach(el=> el.onclick = ()=> $(el.dataset.close).classList.remove("show"));
+document.querySelectorAll(".overlay").forEach(ov=> ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); }));
+document.querySelectorAll("nav.tabs button").forEach(b=> b.onclick = ()=>{ tab = b.dataset.tab; render(); });
+$("prevW").onclick = ()=>{ const d = fromIso(selDate); d.setDate(d.getDate()-7); selDate = iso(d); render(); };
+$("nextW").onclick = ()=>{ const d = fromIso(selDate); d.setDate(d.getDate()+7); selDate = iso(d); render(); };
+$("fabAdd").onclick = ()=> openForm(null);
+$("gearBtn").onclick = openSettings;
+
+load();
+render();
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
