@@ -195,6 +195,17 @@ table.wk .xl{color:var(--accent); font-weight:700; cursor:pointer; text-align:ri
   </div>
 </div>
 
+<!-- import choice -->
+<div class="overlay" id="impOverlay">
+  <div class="sheet">
+    <h2><span>Загрузка копии</span><span class="x" data-close="impOverlay">✕</span></h2>
+    <p class="hint" id="impInfo"></p>
+    <button class="btn" id="impMerge">➕ Объединить — добавить недостающее</button>
+    <button class="btn sec" id="impReplace">♻️ Полностью заменить мои данные</button>
+    <p class="hint">«Объединить» добавит заказы и корректировки, которых здесь нет (по номеру заказа и дате — без задвоения). «Заменить» сотрёт текущие данные и поставит копию вместо них.</p>
+  </div>
+</div>
+
 <!-- paste note -->
 <div class="overlay" id="noteOverlay">
   <div class="sheet">
@@ -700,18 +711,56 @@ $("sBackup").onclick = ()=>{
   dl(blob, "fios-billing-backup-"+iso(new Date())+".json");
 };
 $("sRestore").onclick = ()=> $("sFile").click();
+let pendingImport = null;
 $("sFile").onchange = ()=>{
   const f = $("sFile").files[0]; if(!f) return;
   f.text().then(t=>{
     try{
       const s = JSON.parse(t);
       if(!Array.isArray(s.entries)) throw 0;
-      if(confirm(`Заменить текущие данные? (в копии ${s.entries.length} заказов)`)){
-        state = s; if(!state.adj) state.adj = []; if(!state.rates) state.rates = {};
-        save(); render(); $("setOverlay").classList.remove("show"); toast("Восстановлено ✓");
-      }
+      pendingImport = s;
+      const ds = s.entries.map(e=>e.date).filter(Boolean).sort();
+      $("impInfo").textContent = `В копии: ${s.entries.length} заказов`
+        + (ds.length? ` (${ds[0]} — ${ds[ds.length-1]})` : "")
+        + (s.adj && s.adj.length? `, корректировок: ${s.adj.length}` : "")
+        + `. Сейчас в приложении: ${state.entries.length} заказов.`;
+      $("impOverlay").classList.add("show");
     }catch(e){ toast("Не похоже на файл копии"); }
   });
+  $("sFile").value = "";
+};
+function entryKey(e){ return e.order ? e.date+"|"+e.order+"|"+e.tech : "id:"+e.id; }
+function closeImport(){ pendingImport = null; $("impOverlay").classList.remove("show"); $("setOverlay").classList.remove("show"); }
+$("impMerge").onclick = ()=>{
+  const s = pendingImport; if(!s) return;
+  const keys = new Set(state.entries.map(entryKey));
+  const ids = new Set(state.entries.map(e=>e.id));
+  let added = 0;
+  for(const e of s.entries){
+    if((e.id && ids.has(e.id)) || keys.has(entryKey(e))) continue;
+    state.entries.push(e); keys.add(entryKey(e)); if(e.id) ids.add(e.id); added++;
+  }
+  if(!state.adj) state.adj = [];
+  const aIds = new Set(state.adj.map(a=>a.id));
+  const aKeys = new Set(state.adj.map(a=>a.w+"|"+a.v+"|"+(a.n||"")));
+  let addedAdj = 0;
+  for(const a of (s.adj||[])){
+    const k = a.w+"|"+a.v+"|"+(a.n||"");
+    if((a.id && aIds.has(a.id)) || aKeys.has(k)) continue;
+    state.adj.push(a); aKeys.add(k); if(a.id) aIds.add(a.id); addedAdj++;
+  }
+  (s.techs||[]).forEach(t=>{ if(t && !state.techs.includes(t)) state.techs.push(t); });
+  Object.entries(s.rates||{}).forEach(([k,v])=>{ if(state.rates[k]==null) state.rates[k]=v; });
+  state.entries.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+  save(); render(); closeImport();
+  toast(`Добавлено: ${added} заказ., ${addedAdj} корр. ✓`);
+};
+$("impReplace").onclick = ()=>{
+  const s = pendingImport; if(!s) return;
+  if(!confirm(`Точно заменить? Текущие ${state.entries.length} заказов будут стёрты.`)) return;
+  state = s; if(!state.adj) state.adj = []; if(!state.rates) state.rates = {};
+  if(!state.techs || !state.techs.length) state.techs = ["Anton Latyshev"];
+  save(); render(); closeImport(); toast("Восстановлено ✓");
 };
 
 /* ================= xlsx export ================= */
