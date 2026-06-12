@@ -220,20 +220,20 @@ table.wk .xl{color:var(--accent); font-weight:700; cursor:pointer; text-align:ri
 <!-- weekly adjustments -->
 <div class="overlay" id="adjOverlay">
   <div class="sheet">
-    <h2><span id="adjTitle">Корректировка</span><span class="x" data-close="adjOverlay">✕</span></h2>
+    <h2><span id="adjTitle">Сумма недели</span><span class="x" data-close="adjOverlay">✕</span></h2>
     <div id="adjWeekPick">
       <label>Любой день нужной недели</label>
       <input id="adjDate" type="date" style="margin-bottom:10px">
     </div>
-    <div id="adjList"></div>
+    <p class="hint" style="margin:0 2px 10px">Заказов в приложении на <b id="adjOrders">$0</b>. Впиши итог из расчётки — разница сохранится как корректировка.</p>
     <div class="frow">
-      <div style="flex:0 0 140px"><label>Сумма $ (± минус)</label>
-        <input id="adjAmount" type="number" step="any" inputmode="decimal" placeholder="например −46"></div>
-      <div><label>Комментарий</label>
-        <input id="adjNote" placeholder="не апрувнули F008"></div>
+      <div style="flex:0 0 150px"><label>Итог недели $</label>
+        <input id="adjTotal" type="number" step="any" inputmode="decimal" placeholder="3450"></div>
+      <div><label>Комментарий (необяз.)</label>
+        <input id="adjNote" placeholder="по расчётке"></div>
     </div>
-    <button class="btn" id="adjAdd">Добавить корректировку</button>
-    <p class="hint">Сумма прибавляется к итогу недели (с минусом — вычитается). Удобно для недель, где известна только сумма, и для пересчётов платежей.</p>
+    <button class="btn" id="adjSave">Сохранить сумму недели</button>
+    <div id="adjList" style="margin-top:12px"></div>
   </div>
 </div>
 
@@ -654,39 +654,49 @@ $("noteParse").onclick = ()=>{
 
 /* ================= weekly adjustments ================= */
 let adjWeek = null;
+function curAdjWeek(){ return adjWeek || ($("adjDate").value ? weekKeyOfDate($("adjDate").value) : null); }
+function weekOrdersTotal(k){ return state.entries.filter(e=>weekKeyOfDate(e.date)===k).reduce((s,e)=>s+entryTotal(e),0); }
 function openAdj(weekKey){
   adjWeek = weekKey;
   $("adjWeekPick").style.display = weekKey ? "none" : "";
   if(!weekKey) $("adjDate").value = selDate;
-  $("adjTitle").textContent = weekKey ? "Неделя "+weekLabelOf(fromIso(weekKey)) : "Новая неделя / корректировка";
-  $("adjAmount").value = ""; $("adjNote").value = "";
-  renderAdjList();
+  $("adjTitle").textContent = weekKey ? "Неделя "+weekLabelOf(fromIso(weekKey)) : "Новая неделя";
+  $("adjNote").value = "";
+  renderAdjInfo();
   $("adjOverlay").classList.add("show");
 }
-function renderAdjList(){
-  const list = adjWeek ? adjOfWeek(adjWeek) : [];
+function renderAdjInfo(){
+  const k = curAdjWeek();
+  const ord = k ? weekOrdersTotal(k) : 0;
+  const adjSum = k ? adjOfWeek(k).reduce((s,a)=>s+a.v,0) : 0;
+  $("adjOrders").textContent = money(ord);
+  $("adjTotal").value = k ? Math.round((ord+adjSum)*100)/100 : "";
+  const list = k ? adjOfWeek(k) : [];
   $("adjList").innerHTML = list.map(a=>`<div class="linerow">
-    <div class="lc">${money(a.v)}<small>${a.n||"без комментария"}</small></div>
+    <div class="lc">корректировка ${a.v>0?"+":""}${money(a.v).replace("−$","−$")}<small>${a.n||"без комментария"}</small></div>
     <button class="del" data-id="${a.id}">✕</button></div>`).join("");
   document.querySelectorAll("#adjList .del").forEach(b=> b.onclick = ()=>{
-    if(!confirm("Удалить корректировку?")) return;
+    if(!confirm("Убрать корректировку? Сумма недели вернётся к сумме заказов.")) return;
     state.adj = state.adj.filter(a=>a.id!==b.dataset.id);
-    save(); renderAdjList(); if(tab==="weeks") renderWeeks(); renderHeader();
+    save(); renderAdjInfo(); if(tab==="weeks") renderWeeks(); renderHeader();
   });
 }
-$("adjAdd").onclick = ()=>{
-  const v = parseFloat($("adjAmount").value);
-  if(isNaN(v) || v===0){ toast("Введи сумму (можно с минусом)"); return; }
-  const wk = adjWeek || ($("adjDate").value ? weekKeyOfDate($("adjDate").value) : null);
+$("adjDate").onchange = renderAdjInfo;
+$("adjSave").onclick = ()=>{
+  const t = parseFloat($("adjTotal").value);
+  if(isNaN(t) || t < 0){ toast("Впиши итоговую сумму недели"); return; }
+  const wk = curAdjWeek();
   if(!wk){ toast("Выбери дату недели"); return; }
-  state.adj.push({id:"a"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
-                  w:wk, v:v, n:$("adjNote").value.trim()});
+  const delta = Math.round((t - weekOrdersTotal(wk))*100)/100;
+  state.adj = state.adj.filter(a=>a.w!==wk); // одна корректировка на неделю
+  if(delta !== 0){
+    state.adj.push({id:"a"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+                    w:wk, v:delta, n:$("adjNote").value.trim() || "итог по расчётке"});
+  }
   save(); adjWeek = wk;
-  $("adjTitle").textContent = "Неделя "+weekLabelOf(fromIso(wk));
-  $("adjWeekPick").style.display = "none";
-  $("adjAmount").value = ""; $("adjNote").value = "";
-  renderAdjList(); if(tab==="weeks") renderWeeks(); renderHeader();
-  toast("Сохранено ✓");
+  $("adjOverlay").classList.remove("show");
+  render();
+  toast(delta===0 ? "Сумма совпала с заказами ✓" : "Итог недели: "+money(t)+" ✓");
 };
 
 /* ================= settings ================= */
