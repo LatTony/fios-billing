@@ -588,6 +588,7 @@ $("fDelete").onclick = ()=>{
 };
 
 /* ================= note parsing ================= */
+const NOTE_ALIAS = {"RU": "PD"}; // в ноутсах RU (Ramp Up) = Per Diem
 function parseNote(text){
   const lines = text.split(/\r?\n/);
   const start = lines.findIndex(l=>/stackable\s+codes\s+used/i.test(l));
@@ -611,6 +612,7 @@ function parseNote(text){
       if(!m) continue;
       code = m[1]; rest = line.slice(code.length);
     }
+    code = NOTE_ALIAS[code.toUpperCase()] || code;
     const qm = rest.match(/\((\d+)\)/); // первое число в скобках = количество
     out.push({c: code, q: qm ? parseInt(qm[1]) : 1});
   }
