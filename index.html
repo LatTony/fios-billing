@@ -24,7 +24,8 @@
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
 body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
      background:var(--bg); color:var(--text); padding-bottom:90px}
-header{position:sticky; top:0; z-index:5; background:var(--bg); padding:10px 14px 6px;
+header{position:sticky; top:0; z-index:5; background:var(--bg);
+       padding:calc(10px + env(safe-area-inset-top)) 14px 6px;
        border-bottom:1px solid var(--line)}
 h1{font-size:18px; margin:0 0 8px; display:flex; justify-content:space-between; align-items:center}
 h1 .gear{font-size:20px; cursor:pointer; padding:4px 8px; border-radius:8px}
@@ -189,6 +190,26 @@ table.wk .xl{color:var(--accent); font-weight:700; cursor:pointer; text-align:ri
   </div>
 </div>
 
+<!-- weekly adjustments -->
+<div class="overlay" id="adjOverlay">
+  <div class="sheet">
+    <h2><span id="adjTitle">Корректировка</span><span class="x" data-close="adjOverlay">✕</span></h2>
+    <div id="adjWeekPick">
+      <label>Любой день нужной недели</label>
+      <input id="adjDate" type="date" style="margin-bottom:10px">
+    </div>
+    <div id="adjList"></div>
+    <div class="frow">
+      <div style="flex:0 0 140px"><label>Сумма $ (± минус)</label>
+        <input id="adjAmount" type="number" step="any" inputmode="decimal" placeholder="например −46"></div>
+      <div><label>Комментарий</label>
+        <input id="adjNote" placeholder="не апрувнули F008"></div>
+    </div>
+    <button class="btn" id="adjAdd">Добавить корректировку</button>
+    <p class="hint">Сумма прибавляется к итогу недели (с минусом — вычитается). Удобно для недель, где известна только сумма, и для пересчётов платежей.</p>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script id="seed" type="application/json">[]</script>
@@ -239,6 +260,13 @@ function load(){
     save();
   }
   if(!state.rates) state.rates = {};
+  // недельные корректировки (ручные суммы без деталей по заказам)
+  const SEED_ADJ = [{id:"a-jan01",w:"2025-12-29",v:1210,n:"неделя 01.01-01.03 — только сумма из Excel"},{id:"a-jan12",w:"2026-01-12",v:972,n:"дни 01.12-01.13 — детали остались в Excel"}];
+  if(!state.adj){
+    state.adj = [];
+    SEED_ADJ.forEach(a=>{ if(state.entries.length) state.adj.push(a); });
+    save();
+  }
 }
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); scheduleFileWrite(); }
 
@@ -318,7 +346,7 @@ function rateOf(code){
   const c = CATALOG.find(x=>x.c===code); return c? c.r : 0;
 }
 function entryTotal(e){ return e.lines.reduce((s,l)=>s+l.q*l.r,0); }
-function money(n){ return "$"+(Math.round(n*100)/100).toLocaleString("en-US"); }
+function money(n){ const v = Math.round(Math.abs(n)*100)/100; return (n<0?"−$":"$")+v.toLocaleString("en-US"); }
 
 /* ================= dates / weeks ================= */
 function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
@@ -353,6 +381,7 @@ function renderHeader(){
       <div class="dw">${DW[d.getDay()]}</div><div class="dn">${d.getDate()}</div>
       <div class="ds">${t? "$"+Math.round(t):"·"}</div></div>`);
   }
+  wTot += state.adj.filter(a=>a.w===iso(mon)).reduce((s,a)=>s+a.v,0);
   $("weekLabel").innerHTML = weekLabelOf(mon)+`<small>${money(wTot)} за неделю</small>`;
   $("dayPills").innerHTML = pills.join("");
   document.querySelectorAll(".day").forEach(el=> el.onclick = ()=>{ selDate = el.dataset.d; render(); });
@@ -377,26 +406,36 @@ function renderDay(){
 }
 
 /* ================= render: weeks ================= */
+function adjOfWeek(k){ return state.adj.filter(a=>a.w===k); }
 function renderWeeks(){
   const byWeek = {};
   for(const e of state.entries){
     const k = weekKeyOfDate(e.date);
     (byWeek[k] = byWeek[k]||[]).push(e);
   }
-  const keys = Object.keys(byWeek).sort().reverse();
-  const grand = state.entries.reduce((s,e)=>s+entryTotal(e),0);
+  const adjByWeek = {};
+  for(const a of state.adj) adjByWeek[a.w] = (adjByWeek[a.w]||0) + a.v;
+  const keys = [...new Set([...Object.keys(byWeek), ...Object.keys(adjByWeek)])].sort().reverse();
+  const grand = state.entries.reduce((s,e)=>s+entryTotal(e),0)
+              + state.adj.reduce((s,a)=>s+a.v,0);
   let html = `<div class="grand"><span>Всего за год</span><b>${money(grand)}</b></div>`;
+  html += `<button class="btn sec" id="adjNew" style="margin:0 0 12px">➕ Неделя / корректировка суммы</button>`;
   html += `<div class="search"><input id="qSearch" inputmode="numeric" placeholder="🔍 Поиск по номеру заказа"></div><div id="qRes"></div>`;
   html += `<table class="wk"><tr><th>Неделя</th><th style="text-align:right">Сумма</th><th></th></tr>`;
   for(const k of keys){
-    const tot = byWeek[k].reduce((s,e)=>s+entryTotal(e),0);
-    html += `<tr><td>${weekLabelOf(fromIso(k))}<br><small style="color:var(--muted)">${byWeek[k].length} заказ.</small></td>
+    const ents = byWeek[k]||[];
+    const aSum = adjByWeek[k]||0;
+    const tot = ents.reduce((s,e)=>s+entryTotal(e),0) + aSum;
+    const sub = `${ents.length} заказ.` + (aSum? ` · корр. ${aSum>0?"+":"−"}$${Math.abs(aSum)}` : "");
+    html += `<tr><td class="wkadj" data-adj="${k}" style="cursor:pointer">${weekLabelOf(fromIso(k))} <span style="color:var(--muted)">✎</span><br><small style="color:var(--muted)">${sub}</small></td>
       <td class="sum">${money(tot)}</td>
-      <td class="xl" data-wk="${k}">Excel ⬇︎</td></tr>`;
+      <td class="xl" data-wk="${k}">${ents.length? "Excel ⬇︎":""}</td></tr>`;
   }
-  html += `</table><p class="hint">«Excel ⬇︎» скачивает недельный таймшит в формате Frontier — такой же, как твоя таблица.</p>`;
+  html += `</table><p class="hint">«Excel ⬇︎» скачивает недельный таймшит в формате Frontier. Нажми на неделю (✎), чтобы поправить сумму вручную — например, если платёж пересчитали или не апрувнули. Корректировки в Excel-файл не попадают.</p>`;
   $("main").innerHTML = html;
   document.querySelectorAll(".xl[data-wk]").forEach(el=> el.onclick = ()=> exportWeek(el.dataset.wk));
+  document.querySelectorAll(".wkadj[data-adj]").forEach(el=> el.onclick = ()=> openAdj(el.dataset.adj));
+  $("adjNew").onclick = ()=> openAdj(null);
   $("qSearch").oninput = ()=>{
     const q = $("qSearch").value.trim();
     if(q.length<3){ $("qRes").innerHTML=""; return; }
@@ -532,6 +571,43 @@ $("fDelete").onclick = ()=>{
   save(); $("formOverlay").classList.remove("show"); render(); toast("Удалено");
 };
 
+/* ================= weekly adjustments ================= */
+let adjWeek = null;
+function openAdj(weekKey){
+  adjWeek = weekKey;
+  $("adjWeekPick").style.display = weekKey ? "none" : "";
+  if(!weekKey) $("adjDate").value = selDate;
+  $("adjTitle").textContent = weekKey ? "Неделя "+weekLabelOf(fromIso(weekKey)) : "Новая неделя / корректировка";
+  $("adjAmount").value = ""; $("adjNote").value = "";
+  renderAdjList();
+  $("adjOverlay").classList.add("show");
+}
+function renderAdjList(){
+  const list = adjWeek ? adjOfWeek(adjWeek) : [];
+  $("adjList").innerHTML = list.map(a=>`<div class="linerow">
+    <div class="lc">${money(a.v)}<small>${a.n||"без комментария"}</small></div>
+    <button class="del" data-id="${a.id}">✕</button></div>`).join("");
+  document.querySelectorAll("#adjList .del").forEach(b=> b.onclick = ()=>{
+    if(!confirm("Удалить корректировку?")) return;
+    state.adj = state.adj.filter(a=>a.id!==b.dataset.id);
+    save(); renderAdjList(); if(tab==="weeks") renderWeeks(); renderHeader();
+  });
+}
+$("adjAdd").onclick = ()=>{
+  const v = parseFloat($("adjAmount").value);
+  if(isNaN(v) || v===0){ toast("Введи сумму (можно с минусом)"); return; }
+  const wk = adjWeek || ($("adjDate").value ? weekKeyOfDate($("adjDate").value) : null);
+  if(!wk){ toast("Выбери дату недели"); return; }
+  state.adj.push({id:"a"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+                  w:wk, v:v, n:$("adjNote").value.trim()});
+  save(); adjWeek = wk;
+  $("adjTitle").textContent = "Неделя "+weekLabelOf(fromIso(wk));
+  $("adjWeekPick").style.display = "none";
+  $("adjAmount").value = ""; $("adjNote").value = "";
+  renderAdjList(); if(tab==="weeks") renderWeeks(); renderHeader();
+  toast("Сохранено ✓");
+};
+
 /* ================= settings ================= */
 function openSettings(){
   $("sDefTech").innerHTML = state.techs.map(t=>`<option ${t===state.defTech?"selected":""}>${t}</option>`).join("");
@@ -560,7 +636,8 @@ $("sFile").onchange = ()=>{
       const s = JSON.parse(t);
       if(!Array.isArray(s.entries)) throw 0;
       if(confirm(`Заменить текущие данные? (в копии ${s.entries.length} заказов)`)){
-        state = s; save(); render(); $("setOverlay").classList.remove("show"); toast("Восстановлено ✓");
+        state = s; if(!state.adj) state.adj = []; if(!state.rates) state.rates = {};
+        save(); render(); $("setOverlay").classList.remove("show"); toast("Восстановлено ✓");
       }
     }catch(e){ toast("Не похоже на файл копии"); }
   });
