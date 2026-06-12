@@ -77,8 +77,9 @@ nav.tabs button.on{color:var(--accent)}
 .sheet h2 .x{cursor:pointer; color:var(--muted); font-size:22px; line-height:1}
 .frow{display:flex; gap:8px; margin-bottom:10px}
 .frow>*{flex:1}
-input,select{width:100%; padding:11px 12px; font-size:16px; border-radius:10px;
+input,select,textarea{width:100%; padding:11px 12px; font-size:16px; border-radius:10px;
   border:1px solid var(--line); background:var(--card); color:var(--text)}
+textarea{min-height:170px; resize:vertical; font-family:inherit}
 label{font-size:12px; color:var(--muted); display:block; margin:0 0 4px 2px}
 .presets{display:flex; gap:7px; flex-wrap:wrap; margin:4px 0 12px}
 .presets button{border:1px solid var(--accent); color:var(--accent); background:none;
@@ -162,6 +163,7 @@ table.wk .xl{color:var(--accent); font-weight:700; cursor:pointer; text-align:ri
     <div class="frow">
       <div><label>Техник</label><select id="fTech"></select></div>
     </div>
+    <button class="btn sec" id="fFromNote" style="margin:0 0 12px">📋 Вставить ноутс</button>
     <label>Быстрые шаблоны</label>
     <div class="presets" id="presetBtns"></div>
     <label>Коды (нажми, чтобы добавить)</label>
@@ -190,6 +192,17 @@ table.wk .xl{color:var(--accent); font-weight:700; cursor:pointer; text-align:ri
     <button class="btn sec" id="sRestore">⬆︎ Восстановить из копии</button>
     <input type="file" id="sFile" accept=".json" style="display:none">
     <p class="hint">Данные хранятся в этом браузере. Время от времени скачивай резервную копию.</p>
+  </div>
+</div>
+
+<!-- paste note -->
+<div class="overlay" id="noteOverlay">
+  <div class="sheet">
+    <h2><span>Вставить ноутс</span><span class="x" data-close="noteOverlay">✕</span></h2>
+    <label>Вставь текст ноутса целиком</label>
+    <textarea id="noteText" placeholder="Drop Length: ...&#10;...&#10;Stackable codes used:&#10;F014-1 SOC&#10;F006 (3) Installed Aerial Drop..."></textarea>
+    <button class="btn" id="noteParse" style="margin-top:10px">Распознать коды</button>
+    <p class="hint">Приложение найдёт блок «Stackable codes used» и само заполнит коды с количеством. Текущие строки в форме будут заменены.</p>
   </div>
 </div>
 
@@ -574,6 +587,58 @@ $("fDelete").onclick = ()=>{
   save(); $("formOverlay").classList.remove("show"); render(); toast("Удалено");
 };
 
+/* ================= note parsing ================= */
+function parseNote(text){
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l=>/stackable\s+codes\s+used/i.test(l));
+  if(start < 0) return null;
+  const known = [...new Set([...CATALOG.map(x=>x.c), ...Object.keys(state.rates)])]
+    .sort((a,b)=>b.length-a.length);
+  const out = [];
+  for(const raw of lines.slice(start+1)){
+    const line = raw.trim();
+    if(!line) continue;
+    let code = null, rest = "";
+    for(const k of known){
+      if(line.toUpperCase().startsWith(k.toUpperCase())){
+        const after = line.slice(k.length);
+        if(after==="" || /^[^A-Za-z0-9-]/.test(after)){ code = k; rest = after; break; }
+      }
+    }
+    if(!code){
+      // незнакомый код: F-формат или короткая аббревиатура заглавными (RU, TR…)
+      const m = line.match(/^(\d-F\d{3}(?:-\d+)?|F\d{3}(?:-\d+)?|[A-Z]{2,5})(?=$|[^A-Za-z0-9-])/);
+      if(!m) continue;
+      code = m[1]; rest = line.slice(code.length);
+    }
+    const qm = rest.match(/\((\d+)\)/); // первое число в скобках = количество
+    out.push({c: code, q: qm ? parseInt(qm[1]) : 1});
+  }
+  return out;
+}
+$("fFromNote").onclick = ()=>{
+  $("noteText").value = "";
+  $("noteOverlay").classList.add("show");
+  setTimeout(()=>$("noteText").focus(), 100);
+};
+$("noteParse").onclick = ()=>{
+  const res = parseNote($("noteText").value);
+  if(res === null){ toast("Не нашёл блок «Stackable codes used»"); return; }
+  if(!res.length){ toast("Коды не распознаны"); return; }
+  const merged = {};
+  res.forEach(x=> merged[x.c] = (merged[x.c]||0) + x.q);
+  const unknown = Object.keys(merged).filter(c=>!CATALOG.find(x=>x.c===c) && state.rates[c]==null);
+  unknown.forEach(c=>{
+    const v = parseFloat(prompt(`Код «${c}» не знаком. Какой у него тариф, $ за единицу?`)||"");
+    if(!isNaN(v) && v>0){ state.rates[c] = v; save(); }
+  });
+  fLines = Object.entries(merged).map(([c,q])=>({c, q, r: rateOf(c)}));
+  renderFormLines();
+  $("noteOverlay").classList.remove("show");
+  const noRate = fLines.filter(l=>!l.r).map(l=>l.c);
+  toast(noRate.length ? "⚠️ Без тарифа: "+noRate.join(", ") : `Распознано кодов: ${fLines.length}, ${money(fLines.reduce((s,l)=>s+l.q*l.r,0))}`);
+};
+
 /* ================= weekly adjustments ================= */
 let adjWeek = null;
 function openAdj(weekKey){
@@ -614,7 +679,8 @@ $("adjAdd").onclick = ()=>{
 /* ================= settings ================= */
 function openSettings(){
   $("sDefTech").innerHTML = state.techs.map(t=>`<option ${t===state.defTech?"selected":""}>${t}</option>`).join("");
-  $("sRates").innerHTML = CATALOG.map(x=>`<div class="setrow"><div class="nm">${x.c} <small style="color:var(--muted);font-weight:400">${x.d}</small></div>
+  const extra = Object.keys(state.rates).filter(c=>!CATALOG.find(x=>x.c===c)).map(c=>({c, d:"добавлен из ноутса"}));
+  $("sRates").innerHTML = [...CATALOG, ...extra].map(x=>`<div class="setrow"><div class="nm">${x.c} <small style="color:var(--muted);font-weight:400">${x.d}</small></div>
     <input type="number" step="any" data-c="${x.c}" value="${rateOf(x.c)}"></div>`).join("");
   document.querySelectorAll("#sRates input").forEach(inp=> inp.onchange = ()=>{
     const v = parseFloat(inp.value); if(!isNaN(v)){ state.rates[inp.dataset.c]=v; save(); toast("Тариф обновлён"); }
