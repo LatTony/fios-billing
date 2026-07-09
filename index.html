@@ -614,18 +614,23 @@ function parseNote(text){
     for(const k of known){
       if(line.toUpperCase().startsWith(k.toUpperCase())){
         const after = line.slice(k.length);
-        if(after==="" || /^[^A-Za-z0-9-]/.test(after)){ code = k; rest = after; break; }
+        // после кода: конец строки, разделитель, или слитное количество вида x1 / ×2
+        if(after==="" || /^[^A-Za-z0-9-]/.test(after) || /^[x×]\d/i.test(after)){ code = k; rest = after; break; }
       }
     }
     if(!code){
       // незнакомый код: F-формат или короткая аббревиатура заглавными (RU, TR…)
-      const m = line.match(/^(\d-F\d{3}(?:-\d+)?|F\d{3}(?:-\d+)?|[A-Z]{2,5})(?=$|[^A-Za-z0-9-])/);
+      const m = line.match(/^(\d-F\d{3}(?:-\d+)?|F\d{3}(?:-\d+)?|[A-Z]{2,5})(?=$|[^A-Za-z0-9-]|[xX×]\d)/);
       if(!m) continue;
       code = m[1]; rest = line.slice(code.length);
     }
     code = NOTE_ALIAS[code.toUpperCase()] || code;
-    const qm = rest.match(/\((\d+)\)/); // первое число в скобках = количество
-    out.push({c: code, q: qm ? parseInt(qm[1]) : 1});
+    // количество: слитное/через пробел x1 сразу после кода, иначе первое число в скобках
+    let q = 1;
+    const xm = rest.match(/^\s*[x×]\s*(\d+)/i);
+    const qm = rest.match(/\((\d+)\)/);
+    if(xm) q = parseInt(xm[1]); else if(qm) q = parseInt(qm[1]);
+    out.push({c: code, q});
   }
   return out;
 }
