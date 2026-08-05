@@ -500,12 +500,23 @@ function renderWeeks(){
   };
 }
 
+// iOS: если страница не прокручивается, таб-бар «всплывает» над зоной жестов.
+// Держим документ чуть выше экрана, чтобы панель всегда была у самого низа.
+function ensureScrollable(){
+  const m = $("main"); if(!m) return;
+  m.style.minHeight = "";
+  const need = window.innerHeight + 8 - document.body.offsetHeight;
+  if(need > 0) m.style.minHeight = (m.offsetHeight + need) + "px";
+}
 function render(){
   renderHeader();
   document.querySelectorAll("nav.tabs button").forEach(b=> b.classList.toggle("on", b.dataset.tab===tab));
   $("fabAdd").style.display = tab==="day" ? "" : "none";
   if(tab==="day") renderDay(); else renderWeeks();
+  ensureScrollable();
 }
+window.addEventListener("resize", ensureScrollable);
+window.addEventListener("orientationchange", ()=> setTimeout(ensureScrollable, 250));
 
 /* ================= order form ================= */
 let editId = null, fLines = [], lastTech = null;
