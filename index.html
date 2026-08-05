@@ -113,6 +113,7 @@ table.wk td,table.wk th{padding:11px 12px; font-size:14px; border-bottom:1px sol
 table.wk tr:last-child td{border-bottom:none}
 table.wk .sum{font-weight:700; color:var(--green); text-align:right; white-space:nowrap}
 table.wk .xl{color:var(--accent); font-weight:700; cursor:pointer; text-align:right; white-space:nowrap}
+table.wk .wkadj{color:var(--muted); cursor:pointer; text-align:center; width:34px; font-size:16px}
 .grand{display:flex; justify-content:space-between; align-items:center; background:var(--card);
   border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; font-weight:700}
 .grand b{font-size:22px; color:var(--green)}
@@ -409,7 +410,10 @@ function renderHeader(){
       <div class="ds">${t? "$"+Math.round(t):"·"}</div></div>`);
   }
   wTot += state.adj.filter(a=>a.w===iso(mon)).reduce((s,a)=>s+a.v,0);
-  $("weekLabel").innerHTML = weekLabelOf(mon)+`<small>${money(wTot)} за неделю</small>`;
+  const wEnts = state.entries.filter(e=>weekKeyOfDate(e.date)===iso(mon));
+  $("weekLabel").innerHTML = weekLabelOf(mon)
+    +`<small>${money(wTot)} за неделю</small>`
+    +`<span style="display:block;font-size:11px;color:var(--muted);font-weight:600">${jobsLabel(wEnts)}</span>`;
   $("dayPills").innerHTML = pills.join("");
   document.querySelectorAll(".day").forEach(el=> el.onclick = ()=>{ selDate = el.dataset.d; render(); });
 }
@@ -417,7 +421,7 @@ function renderHeader(){
 function renderDay(){
   const list = state.entries.filter(e=>e.date===selDate);
   const d = fromIso(selDate);
-  let html = `<div class="daysum"><span>${DW[d.getDay()]}, ${d.getDate()}.${String(d.getMonth()+1).padStart(2,"0")} — заказов: ${list.length}</span><b>${money(dayTotal(selDate))}</b></div>`;
+  let html = `<div class="daysum"><span>${DW[d.getDay()]}, ${d.getDate()}.${String(d.getMonth()+1).padStart(2,"0")} — ${jobsLabel(list)}</span><b>${money(dayTotal(selDate))}</b></div>`;
   if(!list.length) html += `<div class="empty">Пока пусто.<br>Нажми <b>+</b> чтобы добавить заказ.</div>`;
   for(const e of list){
     const pd = e.lines.some(l=>l.c==="PD");
@@ -432,8 +436,27 @@ function renderDay(){
   document.querySelectorAll(".card[data-id]").forEach(el=> el.onclick = ()=> openForm(el.dataset.id));
 }
 
+/* ================= счётчики работ ================= */
+const SOC_CODE = "F014-1";   // установка = SOC
+const TT_CODE  = "F008";     // trouble ticket = TT
+function countCode(list, code){
+  return list.reduce((s,e)=> s + e.lines.filter(l=>l.c===code).reduce((x,l)=>x+l.q,0), 0);
+}
+function jobsLabel(list){
+  const soc = countCode(list, SOC_CODE), tt = countCode(list, TT_CODE);
+  const parts = [];
+  if(soc) parts.push("SOC: "+soc);
+  if(tt) parts.push("TT: "+tt);
+  return parts.length ? parts.join(" · ") : "нет SOC/TT";
+}
+
 /* ================= render: weeks ================= */
 function adjOfWeek(k){ return state.adj.filter(a=>a.w===k); }
+function openWeek(k){
+  const ents = state.entries.filter(e=>weekKeyOfDate(e.date)===k).sort((a,b)=> a.date<b.date?-1:1);
+  selDate = ents.length ? ents[0].date : k;
+  tab = "day"; render();
+}
 function renderWeeks(){
   const byWeek = {};
   for(const e of state.entries){
@@ -445,22 +468,24 @@ function renderWeeks(){
   const keys = [...new Set([...Object.keys(byWeek), ...Object.keys(adjByWeek)])].sort().reverse();
   const grand = state.entries.reduce((s,e)=>s+entryTotal(e),0)
               + state.adj.reduce((s,a)=>s+a.v,0);
-  let html = `<div class="grand"><span>Всего за год</span><b>${money(grand)}</b></div>`;
+  let html = `<div class="grand"><span>Всего за год<br><small style="color:var(--muted);font-size:12px">${jobsLabel(state.entries)}</small></span><b>${money(grand)}</b></div>`;
   html += `<button class="btn sec" id="adjNew" style="margin:0 0 12px">➕ Неделя / корректировка суммы</button>`;
   html += `<div class="search"><input id="qSearch" inputmode="numeric" placeholder="🔍 Поиск по номеру заказа"></div><div id="qRes"></div>`;
-  html += `<table class="wk"><tr><th>Неделя</th><th style="text-align:right">Сумма</th><th></th></tr>`;
+  html += `<table class="wk"><tr><th>Неделя</th><th style="text-align:right">Сумма</th><th></th><th></th></tr>`;
   for(const k of keys){
     const ents = byWeek[k]||[];
     const aSum = adjByWeek[k]||0;
     const tot = ents.reduce((s,e)=>s+entryTotal(e),0) + aSum;
-    const sub = `${ents.length} заказ.` + (aSum? ` · корр. ${aSum>0?"+":"−"}$${Math.abs(aSum)}` : "");
-    html += `<tr><td class="wkadj" data-adj="${k}" style="cursor:pointer">${weekLabelOf(fromIso(k))} <span style="color:var(--muted)">✎</span><br><small style="color:var(--muted)">${sub}</small></td>
+    const sub = jobsLabel(ents) + (aSum? ` · корр. ${aSum>0?"+":"−"}$${Math.abs(aSum)}` : "");
+    html += `<tr><td class="wkopen" data-open="${k}" style="cursor:pointer">${weekLabelOf(fromIso(k))} <span style="color:var(--muted)">›</span><br><small style="color:var(--muted)">${sub}</small></td>
       <td class="sum">${money(tot)}</td>
+      <td class="wkadj" data-adj="${k}">✎</td>
       <td class="xl" data-wk="${k}">${ents.length? "Excel ⬇︎":""}</td></tr>`;
   }
-  html += `</table><p class="hint">«Excel ⬇︎» скачивает недельный таймшит в формате Frontier. Нажми на неделю (✎), чтобы поправить сумму вручную — например, если платёж пересчитали или не апрувнули. Корректировки в Excel-файл не попадают.</p>`;
+  html += `</table><p class="hint">Нажми на неделю, чтобы посмотреть её заказы. «✎» — поправить итог недели вручную (если платёж пересчитали или не апрувнули). «Excel ⬇︎» скачивает недельный таймшит в формате Frontier; корректировки в файл не попадают.</p>`;
   $("main").innerHTML = html;
   document.querySelectorAll(".xl[data-wk]").forEach(el=> el.onclick = ()=> exportWeek(el.dataset.wk));
+  document.querySelectorAll(".wkopen[data-open]").forEach(el=> el.onclick = ()=> openWeek(el.dataset.open));
   document.querySelectorAll(".wkadj[data-adj]").forEach(el=> el.onclick = ()=> openAdj(el.dataset.adj));
   $("adjNew").onclick = ()=> openAdj(null);
   $("qSearch").oninput = ()=>{
